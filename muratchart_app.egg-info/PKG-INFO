@@ -1,3 +1,18 @@
+Metadata-Version: 2.4
+Name: muratchart-app
+Version: 0.1.0
+Summary: Stock board trend analysis app
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.115.0
+Requires-Dist: uvicorn[standard]>=0.30.0
+Requires-Dist: sqlalchemy>=2.0.0
+Requires-Dist: python-dotenv>=1.0.1
+Requires-Dist: httpx>=0.27.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.3.0; extra == "dev"
+Requires-Dist: pytest-cov>=5.0.0; extra == "dev"
+
 # 株式掲示板トレンド分析
 
 Yahoo!ファイナンスの掲示板投稿と株価データを収集し、銘柄ごとの日別サマリー、センチメント、テクニカル指標を確認するアプリケーションです。
@@ -7,9 +22,7 @@ FastAPI のバックエンドと、ブラウザで利用する日本語 UI で�
 ## 主な機能
 
 - Yahoo!ファイナンス掲示板から指定期間の投稿を収集
-- 投稿本文を `bullish`（強気）、`bearish`（弱気）、`unknown`（判定不能・本文不備）に分類
-- 強気・弱気の判定語を `sentiment_words.txt` から読み込み
-- 投稿者が選択した投資判断（買いたい、売りたい、中立、未設定）を本文分析とは別に保存
+- 投稿本文を日本語ルールベースでセンチメント分類
 - 投稿に含まれる投資判断ラベルを集計
 - Yahoo Finance Chart API から日次株価を取得
 - 日別の投稿数、著者数、センチメント比率、終値を保存
@@ -88,10 +101,6 @@ Python は 3.11 以上、テストは 1件以上成功することを確認し�
 | `APP_DAILY_RUN_HOUR` | `0` | 定期収集の実行時刻（時） |
 | `APP_DAILY_RUN_MINUTE` | `10` | 定期収集の実行時刻（分） |
 | `APP_DEFAULT_STOCKS` | 空文字 | 起動時から定期収集対象にする銘柄コード（カンマ区切り） |
-| `SENTIMENT_WORDS_PATH` | `sentiment_words.txt` | 本文sentiment判定に使う語彙ファイル |
-| `YAHOO_PAGE_SIZE` | `20` | 無限スクロール相当の追加取得件数 |
-| `YAHOO_SCROLL_WAIT_SECONDS` | `1.2` | 追加取得間の待機秒数 |
-| `YAHOO_MAX_SCROLLS` | `0` | 最大追加取得回数。`0` は無制限（開始日に到達するまで） |
 
 例:
 
@@ -104,13 +113,7 @@ APP_DAILY_RUN_MINUTE=10
 
 銘柄コードは UI や API から登録した場合も大文字に正規化されます。国内銘柄は Yahoo!ファイナンスの URL 形式に合わせて取得されます。
 
-`YAHOO_MAX_SCROLLS=0` の場合、取得は指定した開始日まで継続します。Yahoo!側で空ページ、同一カーソル、APIエラーが返った場合はそこで停止します。長期間の取得を途中で止める場合は、画面の「取得を中止」ボタンまたは `POST /collections/{job_id}/cancel` を使用してください。
-
 ## 起動
-
-Windowsでは、プロジェクト直下の `start_server.bat` をダブルクリックすると、仮想環境のFastAPIサーバーを起動してブラウザを開きます。
-
-停止するときは `stop_server.bat` をダブルクリックしてください。サーバーのログを確認したい場合は、起動時に開く「Stock Board Server」ウィンドウを使用できます。
 
 ```powershell
 uvicorn main:app --reload
@@ -119,8 +122,6 @@ uvicorn main:app --reload
 ブラウザで [http://127.0.0.1:8000](http://127.0.0.1:8000) を開きます。
 
 初回起動時に `data/app.db` が作成されます。既存の CSV はサンプルまたは確認用データであり、アプリのデータベースとして自動インポートされるものではありません。
-
-掲示板投稿の `sentiment` は本文から自動判定した値、`user_intent` は投稿者自身が選択した投資判断です。`user_intent` は「強く買いたい」「買いたい」を「買いたい」、「強く売りたい」「売りたい」を「売りたい」、「中立」を「中立」、選択なしを「未設定」として保存します。
 
 ## 画面の使い方
 
