@@ -21,7 +21,9 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = Path(os.getenv("APP_DATABASE_PATH", BASE_DIR / "data" / "app.db"))
-SENTIMENT_WORDS_PATH = Path(os.getenv("SENTIMENT_WORDS_PATH", BASE_DIR / "sentiment_words.txt"))
+SENTIMENT_WORDS_PATH = Path(
+    os.getenv("SENTIMENT_WORDS_PATH", BASE_DIR / "sentiment_words.txt")
+)
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 
@@ -61,7 +63,9 @@ class StockSummary(Base):
     unset_intent_count: Mapped[int] = mapped_column(sa.Integer, default=0)
 
     __table_args__ = (
-        sa.UniqueConstraint("stock_code", "summary_date", name="uq_stock_code_summary_date"),
+        sa.UniqueConstraint(
+            "stock_code", "summary_date", name="uq_stock_code_summary_date"
+        ),
     )
 
 
@@ -101,32 +105,65 @@ YAHOO_MAX_SCROLLS = int(os.getenv("YAHOO_MAX_SCROLLS", "0"))
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     with engine.begin() as connection:
-        columns = {column[1] for column in connection.exec_driver_sql("PRAGMA table_info(board_posts)")}
+        columns = {
+            column[1]
+            for column in connection.exec_driver_sql("PRAGMA table_info(board_posts)")
+        }
         if "user_intent" not in columns:
             connection.exec_driver_sql(
                 "ALTER TABLE board_posts ADD COLUMN user_intent VARCHAR(16) NOT NULL DEFAULT '未設定'"
             )
-        summary_columns = {column[1] for column in connection.exec_driver_sql("PRAGMA table_info(stock_summaries)")}
-        for column_name in ("buy_intent_count", "sell_intent_count", "neutral_intent_count", "unset_intent_count"):
+        summary_columns = {
+            column[1]
+            for column in connection.exec_driver_sql(
+                "PRAGMA table_info(stock_summaries)"
+            )
+        }
+        for column_name in (
+            "buy_intent_count",
+            "sell_intent_count",
+            "neutral_intent_count",
+            "unset_intent_count",
+        ):
             if column_name not in summary_columns:
                 connection.exec_driver_sql(
                     f"ALTER TABLE stock_summaries ADD COLUMN {column_name} INTEGER NOT NULL DEFAULT 0"
                 )
         if "neutral_count" in summary_columns:
-            connection.exec_driver_sql("ALTER TABLE stock_summaries DROP COLUMN neutral_count")
+            connection.exec_driver_sql(
+                "ALTER TABLE stock_summaries DROP COLUMN neutral_count"
+            )
         if "neutral_ratio" in summary_columns:
-            connection.exec_driver_sql("ALTER TABLE stock_summaries DROP COLUMN neutral_ratio")
-        summary_info = list(connection.exec_driver_sql("PRAGMA table_info(stock_summaries)"))
-        close_price_info = next(column for column in summary_info if column[1] == "close_price")
+            connection.exec_driver_sql(
+                "ALTER TABLE stock_summaries DROP COLUMN neutral_ratio"
+            )
+        summary_info = list(
+            connection.exec_driver_sql("PRAGMA table_info(stock_summaries)")
+        )
+        close_price_info = next(
+            column for column in summary_info if column[1] == "close_price"
+        )
         if close_price_info[3] == 1:
             old_columns = [column[1] for column in summary_info]
-            old_indexes = [row[1] for row in connection.exec_driver_sql("PRAGMA index_list(stock_summaries)")]
+            old_indexes = [
+                row[1]
+                for row in connection.exec_driver_sql(
+                    "PRAGMA index_list(stock_summaries)"
+                )
+            ]
             for index_name in old_indexes:
                 if not index_name.startswith("sqlite_autoindex_"):
                     connection.exec_driver_sql(f'DROP INDEX "{index_name}"')
-            connection.exec_driver_sql("ALTER TABLE stock_summaries RENAME TO stock_summaries_old")
+            connection.exec_driver_sql(
+                "ALTER TABLE stock_summaries RENAME TO stock_summaries_old"
+            )
             Base.metadata.create_all(bind=connection)
-            new_columns = [column[1] for column in connection.exec_driver_sql("PRAGMA table_info(stock_summaries)")]
+            new_columns = [
+                column[1]
+                for column in connection.exec_driver_sql(
+                    "PRAGMA table_info(stock_summaries)"
+                )
+            ]
             common_columns = [column for column in new_columns if column in old_columns]
             column_sql = ", ".join(common_columns)
             connection.exec_driver_sql(
@@ -162,7 +199,9 @@ def load_sentiment_words() -> tuple[list[str], list[str]]:
 
 
 def classify_sentiment(text: str) -> str:
-    normalized = re.sub(r"[^\w\u3040-\u30ff\u4e00-\u9fffA-Za-z0-9\s]", "", unescape(text)).lower()
+    normalized = re.sub(
+        r"[^\w\u3040-\u30ff\u4e00-\u9fffA-Za-z0-9\s]", "", unescape(text)
+    ).lower()
     bullish_keywords, bearish_keywords = load_sentiment_words()
 
     bullish_score = sum(1 for keyword in bullish_keywords if keyword in normalized)
@@ -222,16 +261,34 @@ def parse_yahoo_posts(html: str) -> list[dict[str, Any]]:
             text = re.sub(r"\s+", " ", unescape(text)).strip()
             if not text:
                 continue
-            posts.append({
-                "text": text,
-                "author": re.sub(r"<[^>]+>", " ", unescape(author_match.group(1))).strip() if author_match else "unknown",
-                "posted_at": re.sub(r"\s+", " ", unescape(posted_match.group(1))).strip() if posted_match else None,
-                "sentiment": classify_sentiment(text),
-                    "user_intent": normalize_user_intent(intent_match.group(1) if intent_match else None) if intent_match else "未設定",
-            })
+            posts.append(
+                {
+                    "text": text,
+                    "author": re.sub(
+                        r"<[^>]+>", " ", unescape(author_match.group(1))
+                    ).strip()
+                    if author_match
+                    else "unknown",
+                    "posted_at": re.sub(
+                        r"\s+", " ", unescape(posted_match.group(1))
+                    ).strip()
+                    if posted_match
+                    else None,
+                    "sentiment": classify_sentiment(text),
+                    "user_intent": normalize_user_intent(
+                        intent_match.group(1) if intent_match else None
+                    )
+                    if intent_match
+                    else "未設定",
+                }
+            )
         return posts
 
-    candidates = re.findall(r"comment-body[^>]*>(.*?)</(?:div|p|li|span)>", content, flags=re.IGNORECASE | re.DOTALL)
+    candidates = re.findall(
+        r"comment-body[^>]*>(.*?)</(?:div|p|li|span)>",
+        content,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
     if not candidates:
         candidates = re.findall(r">\s*([^<>]{8,})\s*<", content, flags=re.DOTALL)
 
@@ -241,13 +298,15 @@ def parse_yahoo_posts(html: str) -> list[dict[str, Any]]:
         text = re.sub(r"\s+", " ", text).strip()
         if not text:
             continue
-        posts.append({
-            "text": text,
-            "author": "unknown",
-            "posted_at": None,
-            "sentiment": classify_sentiment(text),
-            "user_intent": "未設定",
-        })
+        posts.append(
+            {
+                "text": text,
+                "author": "unknown",
+                "posted_at": None,
+                "sentiment": classify_sentiment(text),
+                "user_intent": "未設定",
+            }
+        )
     return posts
 
 
@@ -273,13 +332,15 @@ def parse_yahoo_api_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         text = re.sub(r"\s+", " ", text).strip()
         if not text:
             continue
-        posts.append({
-            "text": text,
-            "author": str(item.get("dispname") or "unknown"),
-            "posted_at": str(item.get("postDate") or ""),
-            "sentiment": classify_sentiment(text),
-            "user_intent": normalize_user_intent(item.get("feelLabel")),
-        })
+        posts.append(
+            {
+                "text": text,
+                "author": str(item.get("dispname") or "unknown"),
+                "posted_at": str(item.get("postDate") or ""),
+                "sentiment": classify_sentiment(text),
+                "user_intent": normalize_user_intent(item.get("feelLabel")),
+            }
+        )
     return posts
 
 
@@ -291,7 +352,9 @@ def fetch_yahoo_board_posts(
     on_page: Callable[[list[dict[str, Any]], date | None], None] | None = None,
 ) -> list[dict[str, Any]]:
     normalized_code = normalize_stock_code(stock_code)
-    board_url = f"https://finance.yahoo.co.jp/quote/{yahoo_symbol(normalized_code)}/forum"
+    board_url = (
+        f"https://finance.yahoo.co.jp/quote/{yahoo_symbol(normalized_code)}/forum"
+    )
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/127.0.0.1 Safari/537.36",
         "Accept-Language": "ja-JP,ja;q=0.9,en;q=0.8",
@@ -306,20 +369,31 @@ def fetch_yahoo_board_posts(
             initial_posts = parse_yahoo_posts(html)
             posts.extend(initial_posts)
             if on_page:
-                initial_oldest = min((post_date(post) for post in initial_posts if post_date(post)), default=None)
+                initial_oldest = min(
+                    (post_date(post) for post in initial_posts if post_date(post)),
+                    default=None,
+                )
                 on_page(initial_posts, initial_oldest)
 
-            token_match = re.search(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", html)
+            token_match = re.search(
+                r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", html
+            )
             comment_ids = re.findall(
                 rf'href="/quote/{re.escape(yahoo_symbol(normalized_code))}/forum/(\d+)"',
                 html,
             )
             if not token_match or not comment_ids:
-                return [post for post in posts if start <= (post_date(post) or date.min) <= end]
+                return [
+                    post
+                    for post in posts
+                    if start <= (post_date(post) or date.min) <= end
+                ]
 
             token = token_match.group(0)
             cursor = min(comment_ids, key=int)
-            oldest_loaded = min((post_date(post) for post in posts if post_date(post)), default=None)
+            oldest_loaded = min(
+                (post_date(post) for post in posts if post_date(post)), default=None
+            )
 
             scroll_count = 0
             while True:
@@ -331,7 +405,11 @@ def fetch_yahoo_board_posts(
                     break
                 response = client.get(
                     "https://finance.yahoo.co.jp/bff-quote-stocks/v1/ajax/bbs/comment",
-                    params={"code": normalized_code, "size": YAHOO_PAGE_SIZE, "mid": cursor},
+                    params={
+                        "code": normalized_code,
+                        "size": YAHOO_PAGE_SIZE,
+                        "mid": cursor,
+                    },
                     headers={"x-jwt-token": token},
                 )
                 response.raise_for_status()
@@ -342,7 +420,10 @@ def fetch_yahoo_board_posts(
                 if not items:
                     break
                 posts.extend(page_posts)
-                page_oldest = min((post_date(post) for post in page_posts if post_date(post)), default=None)
+                page_oldest = min(
+                    (post_date(post) for post in page_posts if post_date(post)),
+                    default=None,
+                )
                 if on_page:
                     on_page(page_posts, page_oldest)
                 next_cursor = str(items[-1].get("part") or "")
@@ -350,7 +431,9 @@ def fetch_yahoo_board_posts(
                     break
                 cursor = next_cursor
                 scroll_count += 1
-                if page_oldest is not None and (oldest_loaded is None or page_oldest < oldest_loaded):
+                if page_oldest is not None and (
+                    oldest_loaded is None or page_oldest < oldest_loaded
+                ):
                     oldest_loaded = page_oldest
                 time.sleep(YAHOO_SCROLL_WAIT_SECONDS)
                 if should_stop and should_stop():
@@ -361,18 +444,31 @@ def fetch_yahoo_board_posts(
     return [post for post in posts if start <= (post_date(post) or date.min) <= end]
 
 
-def fetch_yahoo_price_history(stock_code: str, start: date, end: date) -> list[dict[str, Any]]:
+def fetch_yahoo_price_history(
+    stock_code: str, start: date, end: date
+) -> list[dict[str, Any]]:
     symbol = yahoo_symbol(stock_code)
     start_timestamp = int(datetime.combine(start, datetime.min.time()).timestamp())
-    end_timestamp = int(datetime.combine(end + timedelta(days=1), datetime.min.time()).timestamp())
+    end_timestamp = int(
+        datetime.combine(end + timedelta(days=1), datetime.min.time()).timestamp()
+    )
     query = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?period1={start_timestamp}&period2={end_timestamp}&interval=1d"
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
         response = httpx.get(query, headers=headers, timeout=20.0)
         response.raise_for_status()
         payload = response.json()
-        timestamps = payload.get("chart", {}).get("result", [{}])[0].get("timestamp") or []
-        prices = payload.get("chart", {}).get("result", [{}])[0].get("indicators", {}).get("quote", [{}])[0].get("close") or []
+        timestamps = (
+            payload.get("chart", {}).get("result", [{}])[0].get("timestamp") or []
+        )
+        prices = (
+            payload.get("chart", {})
+            .get("result", [{}])[0]
+            .get("indicators", {})
+            .get("quote", [{}])[0]
+            .get("close")
+            or []
+        )
         result: list[dict[str, Any]] = []
         for idx, ts in enumerate(timestamps):
             if idx >= len(prices):
@@ -396,14 +492,16 @@ def persist_posts(stock_code: str, posts: list[dict[str, Any]]) -> None:
         return
     with SessionLocal() as session:
         for post in posts:
-            session.add(BoardPost(
-                stock_code=normalize_stock_code(stock_code),
-                author=str(post.get("author", "unknown")),
-                posted_at=str(post.get("posted_at") or ""),
-                content=str(post.get("text", "")),
-                sentiment=str(post.get("sentiment", "unknown")),
-                user_intent=normalize_user_intent(post.get("user_intent")),
-            ))
+            session.add(
+                BoardPost(
+                    stock_code=normalize_stock_code(stock_code),
+                    author=str(post.get("author", "unknown")),
+                    posted_at=str(post.get("posted_at") or ""),
+                    content=str(post.get("text", "")),
+                    sentiment=str(post.get("sentiment", "unknown")),
+                    user_intent=normalize_user_intent(post.get("user_intent")),
+                )
+            )
         session.commit()
 
 
@@ -471,13 +569,20 @@ async def run_collection(job_id: str, stock_code: str, start: date, end: date) -
     def save_page(page_posts: list[dict[str, Any]], page_oldest: date | None) -> None:
         if page_posts:
             persist_posts(stock_code, page_posts)
+        # 取得できた最古の日付があれば「YYYY/MM/DD までスクロール中...」と表示させる
+        date_str = page_oldest.strftime("%Y/%m/%d") if page_oldest else "取得中"
+
         job["progress"] = {
             **job.get("progress", {}),
-            "phase": "掲示板を遡って取得中",
+            "phase": f"{date_str} までスクロール中...",
             "pages_loaded": job.get("progress", {}).get("pages_loaded", 0) + 1,
-            "saved_posts": job.get("progress", {}).get("saved_posts", 0) + len(page_posts),
-            "loaded_posts": job.get("progress", {}).get("loaded_posts", 0) + len(page_posts),
-            "oldest_posted_at": page_oldest.isoformat() if page_oldest else job.get("progress", {}).get("oldest_posted_at"),
+            "saved_posts": job.get("progress", {}).get("saved_posts", 0)
+            + len(page_posts),
+            "loaded_posts": job.get("progress", {}).get("loaded_posts", 0)
+            + len(page_posts),
+            "oldest_posted_at": page_oldest.isoformat()
+            if page_oldest
+            else job.get("progress", {}).get("oldest_posted_at"),
             "target_start": start.isoformat(),
             "reached_target": page_oldest is not None and page_oldest <= start,
         }
@@ -492,7 +597,9 @@ async def run_collection(job_id: str, stock_code: str, start: date, end: date) -
         "target_start": start.isoformat(),
         "reached_target": False,
     }
-    posts = fetch_yahoo_board_posts(stock_code, start, end, should_stop=cancel_event.is_set, on_page=save_page)
+    posts = fetch_yahoo_board_posts(
+        stock_code, start, end, should_stop=cancel_event.is_set, on_page=save_page
+    )
     if cancel_event.is_set():
         job["status"] = "cancelled"
         return
@@ -509,7 +616,8 @@ async def run_collection(job_id: str, stock_code: str, start: date, end: date) -
                 return
 
             day_posts = [
-                post for post in posts
+                post
+                for post in posts
                 if post["text"]
                 and post["sentiment"] in {"bullish", "bearish", "unknown"}
                 and post_date(post) == current_day
@@ -517,11 +625,20 @@ async def run_collection(job_id: str, stock_code: str, start: date, end: date) -
             sentiment_counts = {"bullish": 0, "bearish": 0, "unknown": 0}
             intent_counts = {"買いたい": 0, "売りたい": 0, "中立": 0, "未設定": 0}
             for post in day_posts:
-                sentiment_counts[post["sentiment"]] = sentiment_counts.get(post["sentiment"], 0) + 1
+                sentiment_counts[post["sentiment"]] = (
+                    sentiment_counts.get(post["sentiment"], 0) + 1
+                )
                 intent = normalize_user_intent(post.get("user_intent"))
                 intent_counts[intent] = intent_counts.get(intent, 0) + 1
             close_price = prices_by_date.get(current_day.isoformat())
-            payload = build_summary_payload(stock_code, current_day, close_price, len(day_posts), sentiment_counts, intent_counts)
+            payload = build_summary_payload(
+                stock_code,
+                current_day,
+                close_price,
+                len(day_posts),
+                sentiment_counts,
+                intent_counts,
+            )
             existing_summary = (
                 session.query(StockSummary)
                 .filter(StockSummary.stock_code == stock_code)
@@ -583,7 +700,14 @@ def list_stocks() -> list[str]:
 @app.get("/crawl-status/{stock_code}")
 def get_crawl_status(stock_code: str) -> dict[str, Any]:
     normalized = normalize_stock_code(stock_code)
-    latest = next((job for job in jobs.values() if job.get("request", {}).get("stock_code") == normalized), None)
+    latest = next(
+        (
+            job
+            for job in jobs.values()
+            if job.get("request", {}).get("stock_code") == normalized
+        ),
+        None,
+    )
     if latest is None:
         return {"stock_code": normalized, "status": "idle"}
     return {"stock_code": normalized, **latest}
@@ -634,7 +758,9 @@ async def create_collection(request: CollectionRequest) -> dict[str, Any]:
     }
     job_cancel_events[job_id] = threading.Event()
     threading.Thread(
-        target=lambda: asyncio.run(run_collection(job_id, stock_code, request.start, request.end)),
+        target=lambda: asyncio.run(
+            run_collection(job_id, stock_code, request.start, request.end)
+        ),
         daemon=True,
     ).start()
     return {"job_id": job_id, "status": "queued"}
@@ -722,20 +848,27 @@ def get_analysis(
     last = summaries[-1]
     previous = summaries[-2] if len(summaries) > 1 else last
     middle = sum(item["bullish_ratio"] for item in summaries) / max(1, len(summaries))
-    rise = ((last["close_price"] - previous["close_price"]) / previous["close_price"]) * 100 if previous["close_price"] else 0.0
+    rise = (
+        ((last["close_price"] - previous["close_price"]) / previous["close_price"])
+        * 100
+        if previous["close_price"]
+        else 0.0
+    )
     comment = (
         "強気が支配的で、価格は緩やかに上昇傾向です。"
         if last["bullish_ratio"] > middle and rise >= 0
         else "価格の伸びが弱く、投稿の慎重さが目立っています。"
     )
-    return [{
-        "stock_code": normalize_stock_code(stock_code),
-        "start": start.isoformat(),
-        "end": end.isoformat(),
-        "comment": comment,
-        "latest_close": last["close_price"],
-        "price_change_pct": round(rise, 2),
-    }]
+    return [
+        {
+            "stock_code": normalize_stock_code(stock_code),
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "comment": comment,
+            "latest_close": last["close_price"],
+            "price_change_pct": round(rise, 2),
+        }
+    ]
 
 
 @app.post("/schedules/{stock_code}")
@@ -871,7 +1004,12 @@ def root() -> str:
                         </form>
                         <div class="progress">
                             <div><div class="progress-label">処理状況</div><div id="progress-status" class="progress-value">待機中</div></div>
-                            <div id="progress-percent" class="progress-percent">0%</div>
+                            <div class="text-right" style="text-align: right;">
+                                <div id="progress-percent" class="progress-percent">0%</div>
+                                <div id="progress-eta-container" style="font-size: 0.75rem; color: #94a3b8; margin-top: 2px; display: none;">
+                                    残り推定: <span id="progress-eta" style="font-weight: 500; color: #475569;">計算中...</span>
+                                </div>
+                            </div>
                               <div class="progress-meta"><span>処理済み <b id="progress-days">0</b> / <span id="target-days">0</span>日</span><span>保存済み <b id="progress-posts">0</b>件</span><span>取得ページ <b id="progress-pages">0</b></span><span>取得済み <b id="progress-loaded">0</b>件</span><span>最古日 <b id="progress-oldest">--</b></span></div>
                         </div>
                         <pre id="status-json" class="status-json"></pre>
@@ -883,7 +1021,7 @@ def root() -> str:
                             <p class="section-note">保存済みの日別データから、終値と掲示板の変化を重ねて表示します。</p>
                         </div>
                         <div class="chart-controls">
-                            <div class="field"><label for="chart-stock">銘柄</label><select id="chart-stock"><option value="6753">6753：シャープ</option></select></div>
+                            <div class="field"><label for="chart-stock">銘柄</label><select id="chart-stock"><option value="">読み込み中...</option></select></div>
                             <div class="field"><label for="chart-start">表示開始日</label><input id="chart-start" type="date" value="2026-09-01" /></div>
                             <div class="field"><label for="chart-end">表示終了日</label><input id="chart-end" type="date" value="2026-09-18" /></div>
                             <button id="refresh-chart" class="primary" type="button">グラフを更新 <span class="arrow">→</span></button>
@@ -904,16 +1042,103 @@ def root() -> str:
                     let activeJobId = null;
                     let pricePostChart = null;
                     let sentimentChart = null;
+                    let collectionStartTime = null; // 👈 開始時間を記録する変数を追加！
                     const palette = { ink: '#17212b', teal: '#168b84', orange: '#d88443', blue: '#4f7897', gray: '#bfc9c9' };
                     const chartOptions = { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { usePointStyle: true, font: { family: 'Yu Mincho' } } } }, scales: { x: { grid: { color: '#edf1f0' } }, y: { position: 'left', grid: { color: '#edf1f0' } }, y1: { position: 'right', grid: { drawOnChartArea: false }, min: 0 } } };
 
-                    function setProgress(status, progress = {}) {
-                        $('progress-status').textContent = progress.phase || status;
-                        $('progress-days').textContent = progress.processed_days || 0;
-                        $('progress-posts').textContent = progress.saved_posts || 0;
-                        $('progress-oldest').textContent = progress.oldest_posted_at || '--';
-                        $('progress-pages').textContent = progress.pages_loaded || 0;
-                        $('progress-loaded').textContent = progress.loaded_posts || 0;
+                function setProgress(status, progress = {}) {
+                    const etaContainer = $('progress-eta-container');
+                    const etaText = $('progress-eta');
+
+                    // ★修正1: status が 'running' または '収集中' の時にタイマーを起動！
+                    if ((status === 'running' || status === '収集中' || status === '処理中') && !collectionStartTime) {
+                        collectionStartTime = Date.now();
+                    }
+
+                    if (status === 'completed' || status === 'cancelled' || status === '完了' || status === '中止') {
+                        $('progress-status').textContent = status === 'completed' ? '完了' : status === 'cancelled' ? '中止' : status;
+                        $('progress-percent').textContent = (status === 'completed' || status === '完了') ? '100%' : '0%';
+                        if (etaContainer) etaContainer.style.display = 'none';
+                        collectionStartTime = null; // リセット
+                    } else {
+                        const phaseText = progress.phase || status;
+                        $('progress-status').textContent = phaseText;
+
+                        const targetDays = parseInt($('target-days').textContent) || 1;
+                        const processedDays = progress.processed_days || 0;
+
+                        const isScrolling = phaseText.includes('スクロール中') || phaseText.includes('読み込み中');
+
+                        if (isScrolling) {
+                            let scrolledDays = 0;
+                            if (progress.oldest_posted_at) {
+                                // ★修正2: 時差ズレを防ぐため年月日を数値でパースして正確に日数計算！
+                                const [oY, oM, oD] = progress.oldest_posted_at.split('-').map(Number);
+                                const oldestDate = new Date(oY, oM - 1, oD);
+
+                                const endVal = $('collection-end').value;
+                                const [eY, eM, eD] = endVal.split('-').map(Number);
+                                const endDate = new Date(eY, eM - 1, eD);
+
+                                const diffTime = Math.max(0, endDate - oldestDate);
+                                // 終了日当日も含むため +1 日
+                                scrolledDays = Math.min(targetDays, Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1);
+                            }
+
+                            // スクロールフェーズは 0% ~ 85% の範囲で進捗を表示
+                            const percent = Math.min(85, Math.round((scrolledDays / targetDays) * 85));
+                            $('progress-percent').textContent = `${percent}%`;
+
+                            // 残り時間を算出！
+                            if (collectionStartTime && scrolledDays > 0) {
+                                const elapsedSec = (Date.now() - collectionStartTime) / 1000;
+                                const secPerDay = elapsedSec / scrolledDays;
+                                const remainingDays = Math.max(0, targetDays - scrolledDays);
+                                const remainingSec = Math.round(remainingDays * secPerDay);
+
+                                if (remainingSec > 60) {
+                                    const min = Math.floor(remainingSec / 60);
+                                    const sec = remainingSec % 60;
+                                    etaText.textContent = `約${min}分${sec}秒`;
+                                } else if (remainingSec > 0) {
+                                    etaText.textContent = `約${remainingSec}秒`;
+                                } else {
+                                    etaText.textContent = 'まもなく完了';
+                                }
+                                if (etaContainer) etaContainer.style.display = 'block';
+                            } else {
+                                if (etaContainer) etaContainer.style.display = 'block';
+                                etaText.textContent = '計算中...';
+                            }
+                        } else if (phaseText.includes('保存中')) {
+                            const savePercent = 85 + Math.round((processedDays / targetDays) * 14);
+                            $('progress-percent').textContent = `${savePercent}%`;
+                            if (etaContainer) etaContainer.style.display = 'none';
+                        } else {
+                            $('progress-percent').textContent = '0%';
+                            if (etaContainer) etaContainer.style.display = 'none';
+                        }
+                    }
+
+                    // メタ情報の更新
+                    $('progress-days').textContent = progress.processed_days || 0;
+                    $('progress-posts').textContent = progress.saved_posts || 0;
+                    $('progress-oldest').textContent = progress.oldest_posted_at || '--';$('progress-pages').textContent = progress.pages_loaded || 0;
+                    $('progress-loaded').textContent = progress.loaded_posts || 0;
+                }
+
+                    // ★追加: DBに存在する銘柄一覧（/stocks）を取得してプルダウンを生成する関数
+                    async function updateStockDropdown() {
+                        try {
+                            const response = await fetch('/stocks');
+                            const stocks = await response.json();
+                            const select = $('chart-stock');
+                            if (stocks && stocks.length > 0) {
+                                select.innerHTML = stocks.map(code => `<option value="${code}">${code}</option>`).join('');
+                            }
+                        } catch (e) {
+                            console.error('銘柄一覧の取得失敗:', e);
+                        }
                     }
 
                     async function renderCharts() {
@@ -931,11 +1156,11 @@ def root() -> str:
                         ] }, options: chartOptions });
                         if (sentimentChart) sentimentChart.destroy();
                         sentimentChart = new Chart($('sentiment-chart'), { type: 'bar', data: { labels, datasets: [
-                            { label: '強気', data: rows.map(row => row.bullish_ratio), backgroundColor: 'rgba(216,132,67,.72)', yAxisID: 'y1' },
-                            { label: '弱気', data: rows.map(row => row.bearish_ratio), backgroundColor: 'rgba(79,120,151,.72)', yAxisID: 'y1' },
-                            { label: '不明', data: rows.map(row => row.unknown_ratio), backgroundColor: 'rgba(191,201,201,.9)', yAxisID: 'y1' },
-                            { type: 'line', label: '終値', data: rows.map(row => row.close_price), borderColor: palette.ink, backgroundColor: palette.ink, yAxisID: 'y', tension: .25, pointRadius: 2 }
-                        ] }, options: { ...chartOptions, scales: { ...chartOptions.scales, y1: { ...chartOptions.scales.y1, max: 1, ticks: { callback: value => `${Math.round(value * 100)}%` } } } } });
+                            { label: '強気', data: rows.map(row => row.bullish_ratio), backgroundColor: 'rgba(216,132,67,.72)', yAxisID: 'y1',order: 2,stack: 'sentiment' },
+                            { label: '弱気', data: rows.map(row => row.bearish_ratio), backgroundColor: 'rgba(79,120,151,.72)', yAxisID: 'y1',order: 2,stack: 'sentiment' },
+                            { label: '不明', data: rows.map(row => row.unknown_ratio), backgroundColor: 'rgba(191,201,201,.9)', yAxisID: 'y1',order: 2,stack: 'sentiment' },
+                            { type: 'line', label: '終値', data: rows.map(row => row.close_price), borderColor: palette.ink, backgroundColor: palette.ink, yAxisID: 'y', tension: .25, pointRadius: 2,order: 1}
+                        ] }, options: { ...chartOptions, scales: { ...chartOptions.scales, x: {...chartOptions.scales.x,stacked: true},y1: { ...chartOptions.scales.y1,stacked: true, max: 1, ticks: { callback: value => `${Math.round(value * 100)}%` } } } } });
                         await renderComment(stock, start, end);
                     }
 
@@ -965,6 +1190,7 @@ def root() -> str:
 
                     $('collection-form').addEventListener('submit', async (event) => {
                         event.preventDefault();
+                        collectionStartTime = Date.now(); //
                         const response = await fetch('/collections', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(event.target).entries())) });
                         const data = await response.json();
                         if (response.ok) await pollJob(data.job_id); else setProgress('エラー', {});
@@ -975,7 +1201,10 @@ def root() -> str:
                     $('schedule-toggle').addEventListener('change', event => { $('schedule-label').textContent = event.target.checked ? '定期集計モード' : '期間指定モード'; });
                     $('schedule-button').addEventListener('click', async () => { await fetch(`/schedules/${$('stock-code').value}`, { method: 'POST' }); $('schedule-toggle').checked = true; $('schedule-label').textContent = '定期集計モード'; $('schedule-cancel-button').disabled = false; });
                     $('schedule-cancel-button').addEventListener('click', async () => { await fetch(`/schedules/${$('stock-code').value}`, { method: 'DELETE' }); $('schedule-toggle').checked = false; $('schedule-label').textContent = '期間指定モード'; $('schedule-cancel-button').disabled = true; });
-                    renderCharts();
+                    (async () => {
+                        await updateStockDropdown();
+                        renderCharts();
+                    })();
                 </script>
       </body>
     </html>
